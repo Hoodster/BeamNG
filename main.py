@@ -10,7 +10,12 @@ HOME = '/dir'
 USER = '/dir'
 
 
-def initialize(scenario_config: Scenario = None, vehicle_config: Vehicle = None):
+def initialize(
+        scenario_config: Scenario = None, 
+        vehicle_config: Vehicle = None, 
+        init_pos: tuple[float, float, float]= (0, 0, 0),
+        init_rotation: tuple[float, float, float, float]= (0, 0, 0, 0)):
+        
     beam_instance = BeamNGpy('localhost', port=PORT, home=HOME, user=USER)
     beam_instance.open(launch=True)
     beam_instance.hide_hud()
@@ -27,7 +32,7 @@ def initialize(scenario_config: Scenario = None, vehicle_config: Vehicle = None)
     for name, sensor in sensors.items():
         vehicle.attach_sensor(name, sensor)
 
-    scenario.add_vehicle(vehicle, pos=(0, 0, 0))
+    scenario.add_vehicle(vehicle, pos=init_pos, rot_quat=init_rotation)
     scenario.make(beam_instance)
     beam_instance.scenario.load(scenario)
     beam_instance.scenario.start()
@@ -44,7 +49,7 @@ def main():
     instance = initialize()
     current_vehicle = instance['vehicle']
 
-    # Drive reverse with around 5km/h (~0.2
+    # Drive reverse with around 5km/h (~0.2 m/s)
     current_vehicle.control(throttle=.2, gear=-1)
 
     # Data collection initialization
