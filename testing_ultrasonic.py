@@ -1,3 +1,5 @@
+import time
+
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
@@ -33,8 +35,42 @@ def main():
 
     scenario = Scenario('gridmap_v2', 'tech_test123', description='Random driving for research')
     vehicle = Vehicle('vehicle1', model='pickup')
+
+    def move_vehicle(vehicle: Vehicle, pos, rot_quat):
+        assert vehicle.is_connected()
+        vehicle.teleport(pos, rot_quat)
+        time.sleep(2)
+
+        def ride(direction):
+            start_pos = vehicle.state['pos'][1]
+            gear = direction['gear']
+            throttle = direction['throttle']
+
+            vehicle.control(throttle=throttle, gear=gear, brake=0)
+
+            while abs(start_pos-vehicle.state['pos'][1]) >= 5.0:
+                continue
+
+            vehicle.control(throttle=0, brake=1)
+
+            while vehicle.state['vel'][1] > 0:
+                continue
+
+        direction = {
+            'gear': 1,
+            'throttle': 0.1,
+        }
+
+        reverse_direction = direction.copy()
+        reverse_direction['gear'] = -1
+
+        ride(direction)
+        time.sleep(1)
+        ride(reverse_direction)
+
     scenario.add_vehicle(vehicle, pos=(28, -77, 100), rot_quat=(0, 0, 1, 0))
     scenario.make(bng)
+
 
     try:
         bng.ui.hide_hud()
@@ -47,6 +83,12 @@ def main():
 
         ultrasonic_front = Ultrasonic('ultrasonic Front', beamng, vehicle, pos=(0, -2, 1.7), dir=(0, -1, 0))
         ultrasonic_rear = Ultrasonic('ultrasonic Rear', beamng, vehicle, pos=(0, 3, 1.7), dir=(0, 1, 0))
+
+        # ########################### TUTAJ WPROWADZAMY POZYCJE SAMOCHODU ######################################### #
+
+        move_vehicle(vehicle, pos=(28, -77, 100), rot_quat=(0, 0, 1, 0))
+
+        # ########################################################################################################## #
 
         fig, ax = plt.subplots()
         
