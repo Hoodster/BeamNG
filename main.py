@@ -1,163 +1,127 @@
-from beamngpy import BeamNGpy, Vehicle, Scenario
+from beamngpy import BeamNGpy, Scenario, Vehicle, StaticObject, angle_to_quat
 from beamngpy.sensors import Ultrasonic
+from environs import Env
+import csv, time
 
-import time
-import matplotlib.pyplot as plt
+# BeamNG instance settings
+# EDIT THESE IN .env FILE
+env = Env()
+env.read_env()
+PATH = env('PROJ_PATH')
+PORT = int(env('PORT'))
 
-# Max allowed distance between obstacle and closest sensor
-THRESHOLD_DISTANCE = 1
+print(PATH)
+
+# EDITABLE (but not recommended)
+THROTTLE = .2   # in meters per second
+DISTANCE = 4.5  # in meters (mind some braking distance)
 
 
-def initialize(
-        scenario_config: Scenario = None,
-        vehicle_config: Vehicle = None,
-        init_pos: tuple[float, float, float] = (100, 100, 100),
-        init_rotation: tuple[float, float, float, float] = (0, 0, 0, 0)):
-    beam_instance = BeamNGpy('localhost', port=50977, home=HOME)
-    beam_instance.open(launch=True)
-    beam_instance.hide_hud()
+def setup_beamng(bng, scenario, vehicle):
+    bng.settings.change('GraphicDisplayResolutions', '1280 720')
+    bng.settings.change('GraphicDisplayModes', 'Window')
+    bng.settings.apply_graphics()
+    bng.settings.set_deterministic(60)
+    bng.ui.hide_hud()
+    bng.scenario.load(scenario)
+    bng.scenario.start()
+    assert vehicle.is_connected()
 
-    scenario = scenario_config or Scenario('gridmap_v2', 'ultrasonic_analysis')
-    vehicle = vehicle_config or Vehicle('ego_vehicle', 'etk800', license='Maciej Hojda')
-    scenario.add_vehicle(vehicle, pos=(-426.68, -43.59, 31.11), rot_quat=(0, 0, 1, 0))
 
-    # left_rear = Ultrasonic('left_rear', beam_instance, vehicle, pos=(0, 0, 0), up=(0, 0, 0))
-    # center_rear = Ultrasonic('center_rear', beam_instance, vehicle, pos=(0, 0, 0), up=(0, 0, 0))
-    # right_rear = Ultrasonic('right_rear', beam_instance, vehicle, pos=(0, 0, 0), up=(0, 0, 0))
+def get_new_data(sensors):
+    distances = {}
+    for sensor_name in sensors.keys():
+        distance = sensors[sensor_name].poll()['distance']
+        distances[sensor_name] = distance
+        print(f"{sensor_name} distance: {distance}")
+    return distances
 
-    # sensors = {
-    #     'left_rear': left_rear,
-    #     'center_rar': center_rear,
-    #     'right_rear': right_rear
-    # }
-    #
-    # for name, sensor in sensors.items():
-    #     vehicle.attach_sensor(name, sensor)
-
-    scenario.make(beam_instance)
-    beam_instance.scenario.load(scenario)
-    beam_instance.scenario.start()
-
-    return {
-        'bng': beam_instance,
-        'scenario': scenario,
-        'vehicle': vehicle,
-        # 'sensors': sensors
-    }
-
-def plot_sensor_data(data):
-    timestamps = list(range(len(data)))
-    left_rear_distances = [chunk['left_rear'] for chunk in data]
-    center_rear_distances = [chunk['center_rear'] for chunk in data]
-    right_rear_distances = [chunk['right_rear'] for chunk in data]
-
-    plt.figure(figsize=(10, 5))
-    plt.plot(timestamps, left_rear_distances, label='Left Rear Sensor')
-    plt.plot(timestamps, center_rear_distances, label='Center Rear Sensor')
-    plt.plot(timestamps, right_rear_distances, label='Right Rear Sensor')
-
-    plt.axhline(y=THRESHOLD_DISTANCE, color='r', linestyle='--', label='Threshold Distance')
-    plt.xlabel('Time (seconds)')
-    plt.ylabel('Distance (meters)')
-    plt.title('Ultrasonic Sensor Distances Over Time')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
 
 def main():
-    instance = initialize()
-    current_vehicle = instance['vehicle']
+    # change in .env file
+    beamng = BeamNGpy('localhost', PORT, home=PATH, user=PATH)
+    scenario = Scenario('smallgrid', 'tech_test123', description='Random driving for research')
+    vehicle = Vehicle('vehicle1', model='pickup')
+    wall = StaticObject(
+        name='wall', 
+        pos=(0, 8, 0),
+        rot_quat=angle_to_quat((90, 0, 90)), scale=(1, 1, 1),
+        shape='/art/shapes/objects/s_drywall.dae')
 
-    def move_vehicle(pos, rot_quat):
-        print('move')
-        assert current_vehicle.is_connected()
-        current_vehicle.teleport(pos, rot_quat)
-        time.sleep(2)
+    sensor_data = []
+
+    def print_results(scenario_name):
+        with open(f'sensor_data_{scenario_name}.csv', 'w', newline='') as csvfile:
+            fieldnames = sensors.keys()
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for item in sensor_data:
+                writer.writerow(item)
+
+            csvfile.close()
+            sensor_data.clear()
+
+    def simulate_movement(simulation_name, pos, rot_quat, forward_opts = None, backward_opts = None):
+        vehicle.teleport(pos=pos, rot_quat=rot_quat)
+        assert vehicle.is_connected()
+        time.sleep(.2)
+
+        forward = forward_opts or {
+            'throttle': THROTTLE,
+            'distance': DISTANCE,
+            'gear': 2,
+        }
+
+        backward = backward_opts or {
+            'throttle': THROTTLE,
+            'distance': DISTANCE * 2,
+            'gear': -1
+        }
 
         def ride(direction):
-            current_vehicle.poll_sensors()
-            start_pos = current_vehicle.state['pos'][1]
-            gear = direction['gear']
-            throttle = direction['throttle']
+            def get_current_position():
+                vehicle.poll_sensors()
+                return vehicle.state['pos'][1]
 
-            # Move forward or backward
-            current_vehicle.control(throttle=throttle, gear=gear, brake=0)
-            print('ride')
-            time.sleep(0.1)  # Small delay to allow for initial movement
+            def get_current_speed():
+                vehicle.poll_sensors()
+                return abs(vehicle.state['vel'][1])
 
-            # Wait until the vehicle has moved approximately 4 meters
-            while abs(current_vehicle.state['pos'][1] - start_pos) <= 5.0:
-                current_vehicle.poll_ensors()
-                print('reverse' if gear == -1 else 'follow')
-                time.sleep(0.1)  # Adjust the delay as needed
+            is_braking = False
+            start_pos = get_current_position()
 
-            # Stop the vehicle
-            current_vehicle.control(throttle=0, brake=1, gear=0)
-            print('brake')
+            while get_current_speed() > 0.2 or not is_braking:
 
-            # Wait until the vehicle velocity drops below 0.08 m/s to ensure it has stopped
-            while current_vehicle.state['vel'][1] > 0.08:
-                current_vehicle.poll_sensors()
-                time.sleep(0.1)  # Adjust the delay as needed
+                if is_braking:
+                    vehicle.control(throttle=0, brake=1, parkingbrake=1, gear=0)
+                else:
+                    vehicle.control(throttle=direction['throttle'], gear=direction['gear'], brake=0, parkingbrake=0)
+                    is_braking = abs(get_current_position() - start_pos) >= direction['distance']
 
-            print(f'distance:  {abs(current_vehicle.state['pos'][1] - start_pos)}')
-            print('end')
+                measure = get_new_data(sensors)
+                sensor_data.append(measure)
 
-        direction = {
-            'gear': 2,
-            'throttle': 0.2,
+            print(f'Stopped at position Y:   {get_current_position()}')
+
+        ride(forward)
+        ride(backward)
+        print_results(simulation_name)
+        time.sleep(5)
+
+    with beamng.open(launch=True) as bng:
+        scenario.add_object(wall)
+        scenario.add_vehicle(vehicle, pos=(0, 0, 0.3), rot_quat=(0, 0, 1, 0))
+        scenario.make(bng)
+        setup_beamng(bng, scenario, vehicle)
+
+        sensors = {
+            "front left": Ultrasonic('ultrasonic Front', beamng, vehicle, pos=(0.6, -2.2, 0.6), dir=(0, -1, 0)),
+            "front right": Ultrasonic('ultrasonic Front', beamng, vehicle, pos=(-0.6, -2.2, 0.6), dir=(0, -1, 0)),
         }
 
-        reverse_direction = {
-            'gear': -1,
-            'throttle': 0.2,
-        }
-
-        ride(direction)
-        time.sleep(1)
-        print('FOLLOW=>REVERSE')
-        ride(reverse_direction)
-
-    move_vehicle(pos=(28, -150.59, 100.8), rot_quat=(0, 0, 1, 0))
-
-
-    # # Data collection initialization
-    # data = []
-    #
-    # # LET'S GOOOO
-    # while True:
-    #     time.sleep(1)
-    #     sensors = current_vehicle.sensors.poll()
-    #     stop_flag = False
-    #
-    #     # Do-while enforcement; when car stops then exit loop
-    #     if sensors['electrics']['throttle'] == 0:
-    #         break
-    #
-    #     # Data chunk from all ultrasonic sensors
-    #     chunk = {}
-    #
-    #     # Read data from sensors
-    #     for name, sensor in instance['sensors'].items():
-    #         sensor_distance = sensors[name]['distance']
-    #         chunk[name] = sensor_distance
-    #
-    #         # If any of sensors value reaches equal or lower to distance threshold set flag to start braking
-    #         if sensor_distance <= THRESHOLD_DISTANCE:
-    #             stop_flag = True
-    #
-    #     if stop_flag:
-    #         current_vehicle.control(throttle=0, brake=1)
-
-   #     data.append(chunk)
-
-
-
-
-    # Data part here
-
-# Plot the collected data
-    plot_sensor_data(data)
+        simulate_movement('sample_name', pos=(0, 0, 0.3), rot_quat=(0, 0, -1, 0))
+        
 
 if __name__ == '__main__':
     main()
