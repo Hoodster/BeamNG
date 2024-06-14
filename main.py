@@ -17,12 +17,18 @@ THROTTLE = .2   # in meters per second
 DISTANCE = 4.5  # in meters (mind some braking distance)
 
 
-def setup_beamng(bng, scenario, vehicle):
+def setup_beamng(bng, scenario, vehicle, obstacles):
     bng.settings.change('GraphicDisplayResolutions', '1280 720')
     bng.settings.change('GraphicDisplayModes', 'Window')
     bng.settings.apply_graphics()
     bng.settings.set_deterministic(60)
     bng.ui.hide_hud()
+
+    scenario.add_vehicle(vehicle, pos=(0, 0, 0.3), rot_quat=(0, 0, 1, 0))
+    for obstacle in obstacles:
+        scenario.add_object(obstacle)
+    scenario.make(bng)
+
     bng.scenario.load(scenario)
     bng.scenario.start()
     assert vehicle.is_connected()
@@ -110,10 +116,7 @@ def main():
         time.sleep(5)
 
     with beamng.open(launch=True) as bng:
-        scenario.add_object(wall)
-        scenario.add_vehicle(vehicle, pos=(0, 0, 0.3), rot_quat=(0, 0, 1, 0))
-        scenario.make(bng)
-        setup_beamng(bng, scenario, vehicle)
+        setup_beamng(bng, scenario, vehicle,[wall])
 
         sensors = {
             "front left": Ultrasonic('ultrasonic Front', beamng, vehicle, pos=(0.6, -2.2, 0.6), dir=(0, -1, 0)),
