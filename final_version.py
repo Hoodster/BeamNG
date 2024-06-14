@@ -31,7 +31,8 @@ def get_new_data(sensors):
     return distances
 
 def main():
-    beamng = BeamNGpy('localhost', 64256, home=r"C:\Gry\BeamNG.tech.v0.31.3.0", user=r"C:\Gry\BeamNG.tech.v0.31.3.0")
+    beamng = BeamNGpy('localhost', 50977, home=r'C:\Users\kubap\Desktop\BeamNG\BeamNG.tech.v0.32.2.0',
+                      user=r'C:\Users\kubap\Desktop\BeamNG\BeamNG.tech.v0.32.2.0')
     scenario = Scenario('smallgrid', 'tech_test123', description='Random driving for research')
     vehicle = Vehicle('vehicle1', model='pickup')
     wall = StaticObject(
@@ -42,7 +43,19 @@ def main():
 
     sensor_data = []
 
-    def simulate_movement(pos, rot_quat, forward_opts = None, backward_opts = None):
+    def print_results(scenario_name):
+        with open(f'sensor_data_{scenario_name}.csv', 'w', newline='') as csvfile:
+            fieldnames = sensors.keys()
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for item in sensor_data:
+                writer.writerow(item)
+
+            csvfile.close()
+            sensor_data.clear()
+
+    def simulate_movement(simulation_name, pos, rot_quat, forward_opts = None, backward_opts = None):
         vehicle.teleport(pos=pos, rot_quat=rot_quat)
         assert vehicle.is_connected()
         time.sleep(.2)
@@ -86,6 +99,7 @@ def main():
 
         ride(forward)
         ride(backward)
+        print_results(simulation_name)
         time.sleep(5)
 
     with beamng.open(launch=True) as bng:
@@ -99,20 +113,11 @@ def main():
             "front right": Ultrasonic('ultrasonic Front', beamng, vehicle, pos=(-0.6, -2.2, 0.6), dir=(0, -1, 0)),
         }
 
-        simulate_movement(pos=(0, 0, 0.3), rot_quat=(0, 0, -1, 0))
+        simulate_movement('sample_name', pos=(0, 0, 0.3), rot_quat=(0, 0, -1, 0))
         
 
-        with open('sensor_data.csv', 'w', newline='') as csvfile:
-            fieldnames = sensors.keys()
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
 
-            for item in sensor_data:
-                writer.writerow(item)
 
-            csvfile.close()
-        
-        beamng.close()
 
 if __name__ == '__main__':
     main()
