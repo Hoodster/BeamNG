@@ -2,6 +2,7 @@ from beamngpy import BeamNGpy, Vehicle, Scenario
 from beamngpy.sensors import Ultrasonic
 
 import time
+import matplotlib.pyplot as plt
 
 # Max allowed distance between obstacle and closest sensor
 THRESHOLD_DISTANCE = 1
@@ -44,6 +45,24 @@ def initialize(
         # 'sensors': sensors
     }
 
+def plot_sensor_data(data):
+    timestamps = list(range(len(data)))
+    left_rear_distances = [chunk['left_rear'] for chunk in data]
+    center_rear_distances = [chunk['center_rear'] for chunk in data]
+    right_rear_distances = [chunk['right_rear'] for chunk in data]
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(timestamps, left_rear_distances, label='Left Rear Sensor')
+    plt.plot(timestamps, center_rear_distances, label='Center Rear Sensor')
+    plt.plot(timestamps, right_rear_distances, label='Right Rear Sensor')
+
+    plt.axhline(y=THRESHOLD_DISTANCE, color='r', linestyle='--', label='Threshold Distance')
+    plt.xlabel('Time (seconds)')
+    plt.ylabel('Distance (meters)')
+    plt.title('Ultrasonic Sensor Distances Over Time')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 def main():
     instance = initialize()
@@ -137,6 +156,8 @@ def main():
 
     # Data part here
 
+# Plot the collected data
+    plot_sensor_data(data)
 
 if __name__ == '__main__':
     main()
