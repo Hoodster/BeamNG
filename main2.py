@@ -7,14 +7,14 @@ import csv, time
 # EDIT THESE IN .env FILE
 env = Env()
 env.read_env()
-PATH = env('PROJ_PATH')
-PORT = int(env('PORT'))
+PATH = r"C:\Gry\BeamNG.tech.v0.31.3.0" # env('PROJ_PATH')
+PORT = 6454 # int(env('PORT'))
 
 print(PATH)
 
 # EDITABLE (but not recommended)
-THROTTLE = .2   # in meters per second
-DISTANCE = 4.5  # in meters (mind some braking distance)
+THROTTLE = .05   # in meters per second
+DISTANCE = 6.3 # in meters (mind some braking distance)
 
 
 def setup_beamng(bng, scenario, vehicle, obstacles):
@@ -45,7 +45,7 @@ def get_new_data(sensors):
 
 def main():
     # change in .env file
-    beamng = BeamNGpy('localhost', PORT, home=HOME, user=PATH)
+    beamng = BeamNGpy('localhost', PORT, home=PATH, user=PATH)
     scenario = Scenario('smallgrid', 'tech_test123', description='Random driving for research')
     vehicle = Vehicle('vehicle1', model='pickup')
 
@@ -60,21 +60,21 @@ def main():
     names.append('wall')
     curbstone = StaticObject(
         name='curbstone',
-        pos=(10, 8, 0),
+        pos=(10, 8, 0.2),
         rot_quat=angle_to_quat((90, 0, 90)), scale=(0.2, 1, 1),
         shape='/art/shapes/objects/s_drywall.dae')
     objects.append(curbstone)
     names.append('curbstone')
     fakesign = StaticObject(
         name='fakesign',
-        pos=(20, 8, 0),
+        pos=(19.5, 8, 0),
         rot_quat=angle_to_quat((0, 90, 90)), scale=(0.050, 2.500, 0.050),
         shape='/art/shapes/objects/s_spool_wire.dae')
     objects.append(fakesign)
     names.append('fakesign')
     verticalpipe = StaticObject(
         name='verticalpipe',
-        pos=(30, 8, 1.5),
+        pos=(30, 8, 1),
         rot_quat=angle_to_quat((90, 0, 90)), scale=(0.050, 2.500, 0.050),
         shape='/art/shapes/objects/s_spool_wire.dae')
     objects.append(verticalpipe)
@@ -96,7 +96,7 @@ def main():
     def simulate_movement(simulation_name, pos, rot_quat, forward_opts = None, backward_opts = None):
         vehicle.teleport(pos=pos, rot_quat=rot_quat)
         assert vehicle.is_connected()
-        time.sleep(.2)
+        time.sleep(.1)
 
         forward = forward_opts or {
             'throttle': THROTTLE,
@@ -122,12 +122,15 @@ def main():
             is_braking = False
             start_pos = get_current_position()
 
-            while get_current_speed() > 0.2 or not is_braking:
+            while get_current_speed() > THROTTLE or not is_braking:
 
                 if is_braking:
-                    vehicle.control(throttle=0, brake=1, parkingbrake=1, gear=0, clutch=.4)
+                    vehicle.control(throttle=0, brake=1, parkingbrake=1, gear=0)
                 else:
-                    vehicle.control(throttle=direction['throttle'], gear=direction['gear'], brake=0, parkingbrake=0)
+                    if get_current_speed() > 0.7:
+                        vehicle.control(throttle=0, gear=direction['gear'], brake=0, parkingbrake=0)
+                    else:
+                        vehicle.control(throttle=direction['throttle'], gear=direction['gear'], brake=0, parkingbrake=0)
                     is_braking = abs(get_current_position() - start_pos) >= direction['distance']
 
                 measure = get_new_data(sensors)
@@ -138,19 +141,25 @@ def main():
         ride(forward)
         ride(backward)
         print_results(simulation_name)
-        time.sleep(5)
+        time.sleep(3)
 
     with beamng.open(launch=True) as bng:
-        setup_beamng(bng, scenario, vehicle,objects)
-        pos = (0,0,0.3)
-        for i in range(len(objects)):
-            sensors = {
-                "front left": Ultrasonic('ultrasonic Front', beamng, vehicle, pos=(0.6, -2.2, 0.6), dir=(0, -1, 0)),
-                "front right": Ultrasonic('ultrasonic Front', beamng, vehicle, pos=(-0.6, -2.2, 0.6), dir=(0, -1, 0)),
-            }
+        setup_beamng(bng, scenario, vehicle, objects)
+        base_pos = (0, 0, 0.3)
+        heights = [0.3, 0.6, 0.9, 1.2]
+        for height in heights:
+            for i in range(len(objects)):
+                sensors = {
+                    "front left": Ultrasonic('ultrasonic Front 1', beamng, vehicle, pos=(0.6, -2.2, height), dir=(0, -1, 0)),
+                    "front right": Ultrasonic('ultrasonic Front 2', beamng, vehicle, pos=(-0.6, -2.2, height), dir=(0, -1, 0)),
+                }
+                simulate_movement(f"{names[i]}_height_{height}", pos=base_pos, rot_quat=(0, 0, -1, 0))
+                base_pos = (base_pos[0] + 10, 0, 0.3)
+        
+            for sensor in sensors.values():
+                sensor.remove()
 
-            simulate_movement(names[i], pos=pos, rot_quat=(0, 0, -1, 0))
-            pos = (pos[0] + 10, 0, 0.3)
+            base_pos = (0, 0, 0.3)
         
 
 if __name__ == '__main__':
