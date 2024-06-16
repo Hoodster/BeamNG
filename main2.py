@@ -125,7 +125,7 @@ def main():
             while get_current_speed() > 0.2 or not is_braking:
 
                 if is_braking:
-                    vehicle.control(throttle=0, brake=1, parkingbrake=1, gear=0)
+                    vehicle.control(throttle=0, brake=1, parkingbrake=1, gear=0, clutch=.4)
                 else:
                     vehicle.control(throttle=direction['throttle'], gear=direction['gear'], brake=0, parkingbrake=0)
                     is_braking = abs(get_current_position() - start_pos) >= direction['distance']
